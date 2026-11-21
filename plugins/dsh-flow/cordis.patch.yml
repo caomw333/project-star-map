@@ -1,0 +1,5 @@
+- insert:
+    - id: dsh-flow
+      name: '@local/dsh-flow'
+      config:
+        sessionId: replace-with-your-session-id

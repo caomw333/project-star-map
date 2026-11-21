@@ -1,0 +1,13 @@
+{
+  "name": "@local/dsh-flow",
+  "version": "0.1.3",
+  "private": true,
+  "type": "module",
+  "description": "Publishes a turn's flow-map proposal and gates file writes in one configured DSH session.",
+  "exports": "./index.js",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

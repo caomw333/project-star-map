@@ -1,0 +1,294 @@
+{
+  "version": 1,
+  "project": "star-map",
+  "title": "AI 改动前的项目星图",
+  "summary": "跟随一份改动提案，从 AI 声明影响范围，看见对应步骤在图上亮起。",
+  "phases": [
+    {
+      "id": "proposal",
+      "title": "提交提案",
+      "layer": "AI 工具",
+      "position": [
+        -355,
+        0
+      ],
+      "steps": [
+        {
+          "id": "receive",
+          "title": "读取影响范围",
+          "detail": "接收本轮拟改的步骤、文件和说明。",
+          "file": "plugins/dsh-flow/index.js",
+          "line": 200,
+          "position": [
+            -110,
+            -24
+          ]
+        },
+        {
+          "id": "validate",
+          "title": "校验步骤引用",
+          "detail": "对照现状图校验步骤和连线。",
+          "file": "plugins/dsh-flow/index.js",
+          "line": 210,
+          "position": [
+            110,
+            24
+          ]
+        }
+      ],
+      "subflow": {
+        "edges": [
+          {
+            "from": "receive",
+            "to": "validate",
+            "label": "stepRefs · 步骤引用"
+          }
+        ]
+      }
+    },
+    {
+      "id": "save",
+      "title": "发布范围",
+      "layer": "本轮状态",
+      "position": [
+        -69,
+        -112
+      ],
+      "steps": [
+        {
+          "id": "assemble",
+          "title": "整理改动范围",
+          "detail": "将校验后的步骤和文件组成本轮提案。",
+          "file": "plugins/dsh-flow/index.js",
+          "line": 215,
+          "position": [
+            -110,
+            0
+          ]
+        },
+        {
+          "id": "store",
+          "title": "保存本轮提案",
+          "detail": "原子替换查看器读取的提案文件，再更新内存中的写入范围。",
+          "file": "plugins/dsh-flow/index.js",
+          "line": 222,
+          "position": [
+            110,
+            0
+          ]
+        }
+      ],
+      "subflow": {
+        "edges": [
+          {
+            "from": "assemble",
+            "to": "store",
+            "label": "步骤、文件、说明"
+          }
+        ]
+      }
+    },
+    {
+      "id": "viewer",
+      "title": "星图标注",
+      "layer": "查看器",
+      "position": [
+        245,
+        -97
+      ],
+      "steps": [
+        {
+          "id": "load",
+          "title": "读回最新提案",
+          "detail": "查看器轮询提案，读回本轮状态。",
+          "file": "flow/viewer.html",
+          "line": 1125,
+          "position": [
+            -90,
+            -36
+          ]
+        },
+        {
+          "id": "mark",
+          "title": "高亮受影响步骤",
+          "detail": "匹配阶段和步骤 ID，给对应卡片加上关注标记。",
+          "file": "flow/viewer.html",
+          "line": 283,
+          "position": [
+            90,
+            40
+          ]
+        }
+      ],
+      "subflow": {
+        "edges": [
+          {
+            "from": "load",
+            "to": "mark",
+            "label": "stepRefs · 命中步骤"
+          }
+        ]
+      }
+    },
+    {
+      "id": "guard",
+      "title": "检查写入",
+      "layer": "工具守卫",
+      "position": [
+        130,
+        132
+      ],
+      "steps": [
+        {
+          "id": "check",
+          "title": "检查提案状态",
+          "detail": "未发布有效的文件提案时，拦截受守卫的写入。",
+          "file": "plugins/dsh-flow/index.js",
+          "line": 232,
+          "position": [
+            -100,
+            0
+          ]
+        },
+        {
+          "id": "file",
+          "title": "核对目标文件",
+          "detail": "已列出的目标文件可继续写入。",
+          "file": "plugins/dsh-flow/index.js",
+          "line": 238,
+          "position": [
+            100,
+            0
+          ]
+        }
+      ],
+      "subflow": {
+        "edges": [
+          {
+            "from": "check",
+            "to": "file",
+            "label": "已发布 · 文件范围"
+          }
+        ]
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "proposal",
+      "to": "save",
+      "label": "已校验的影响范围",
+      "fromStep": "validate",
+      "toStep": "assemble"
+    },
+    {
+      "from": "save",
+      "to": "viewer",
+      "label": "本轮提案",
+      "fromStep": "store",
+      "toStep": "load"
+    },
+    {
+      "from": "save",
+      "to": "guard",
+      "label": "已发布状态",
+      "fromStep": "store",
+      "toStep": "check"
+    }
+  ],
+  "traces": [
+    {
+      "id": "step-refs",
+      "title": "stepRefs · 步骤引用",
+      "nodes": [
+        {
+          "phase": "proposal",
+          "step": "receive",
+          "detail": "接收本轮拟改的步骤、文件和说明。"
+        },
+        {
+          "phase": "proposal",
+          "step": "validate",
+          "detail": "对照现状图校验步骤和连线。"
+        },
+        {
+          "phase": "save",
+          "step": "assemble",
+          "detail": "将校验后的步骤和文件组成本轮提案。"
+        },
+        {
+          "phase": "save",
+          "step": "store",
+          "detail": "原子替换查看器读取的提案文件，再更新内存中的写入范围。"
+        },
+        {
+          "phase": "viewer",
+          "step": "load",
+          "detail": "查看器轮询提案，读回本轮状态。"
+        },
+        {
+          "phase": "viewer",
+          "step": "mark",
+          "detail": "匹配阶段和步骤 ID，给对应卡片加上关注标记。"
+        }
+      ],
+      "edges": [
+        {
+          "from": {
+            "phase": "proposal",
+            "step": "receive"
+          },
+          "to": {
+            "phase": "proposal",
+            "step": "validate"
+          },
+          "label": "stepRefs 输入"
+        },
+        {
+          "from": {
+            "phase": "proposal",
+            "step": "validate"
+          },
+          "to": {
+            "phase": "save",
+            "step": "assemble"
+          },
+          "label": "校验后的步骤引用"
+        },
+        {
+          "from": {
+            "phase": "save",
+            "step": "assemble"
+          },
+          "to": {
+            "phase": "save",
+            "step": "store"
+          },
+          "label": "写入提案"
+        },
+        {
+          "from": {
+            "phase": "save",
+            "step": "store"
+          },
+          "to": {
+            "phase": "viewer",
+            "step": "load"
+          },
+          "label": "读取 stepRefs"
+        },
+        {
+          "from": {
+            "phase": "viewer",
+            "step": "load"
+          },
+          "to": {
+            "phase": "viewer",
+            "step": "mark"
+          },
+          "label": "匹配步骤 ID"
+        }
+      ]
+    }
+  ]
+}

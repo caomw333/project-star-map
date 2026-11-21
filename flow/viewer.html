@@ -1,0 +1,1140 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>项目星图</title>
+<style>
+  :root { color-scheme: dark; font-family: Geist, "Microsoft YaHei", system-ui, sans-serif; background: #0b1020; color: #ebf0ff; }
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  main { min-height: 100dvh; display: flex; flex-direction: column; padding: clamp(14px, 3vw, 38px); max-width: 1680px; margin: auto; }
+  header { display: flex; align-items: end; justify-content: space-between; gap: 18px; margin-bottom: 20px; }
+  h1, h2, p { margin: 0; }
+  h1 { font-size: clamp(1.4rem, 3vw, 2.35rem); letter-spacing: -.04em; }
+  .project { color: #a7badc; font-size: .78rem; margin-bottom: 5px; }
+  #summary { margin-top: 7px; color: #a7badc; font-size: .86rem; line-height: 1.65; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  button:focus-visible, a:focus-visible, .viewport:focus-visible { outline: 2px solid #a6ecff; outline-offset: 4px; }
+  .control { background: #17243b; padding: 8px 12px; border: 1px solid #3a506e; border-radius: 8px; white-space: nowrap; font-size: .8rem; }
+  .controls { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+  select.control { color: inherit; font-family: inherit; max-width: 100%; }
+  .viewport { flex: 1; min-height: 450px; height: 70dvh; overflow: hidden; position: relative; isolation: isolate; touch-action: none; cursor: grab; border: 1px solid #263653; border-radius: 16px; background: radial-gradient(ellipse at 55% 48%, #132344, #0d152a 62%, #0a1123); }
+  .viewport.dragging { cursor: grabbing; user-select: none; }
+  .viewport.edge-hover { cursor: pointer; }
+  .edge-tip { position: absolute; z-index: 5; pointer-events: none; padding: 5px 8px; border: 1px solid #f5d47c; border-radius: 6px; background: #18243af2; color: #fff0bd; font-size: .76rem; white-space: nowrap; }
+  .viewport::before { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .45; background: radial-gradient(circle, #536c9d 1px, transparent 1.3px) 0 0 / 30px 30px; mask-image: radial-gradient(ellipse, #000 10%, #0009 80%); }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .world { position: absolute; top: 0; left: 0; transform-origin: 0 0; }
+  .node, .step { position: absolute; transform: translate(-50%, -50%); display: grid; align-content: center; text-align: center; gap: 4px; padding: 7px; border: 1px solid #54729f; background: #132341; box-shadow: 0 0 22px #77abff16; }
+  .node { width: 144px; min-height: 58px; border-radius: 32px; }
+  .node { cursor: grab; user-select: none; }
+  .node.dragging { cursor: grabbing; z-index: 1; }
+  .node[data-subflow] { transition: opacity 160ms ease, visibility 160ms; }
+  .node[data-subflow="true"] { opacity: 0; visibility: hidden; pointer-events: none; }
+  .node strong { font-size: calc(.86rem * var(--label-scale, 1)); }
+  .node small { color: #a9c1e5; font-size: calc(.64rem * var(--label-scale, 1)); overflow-wrap: anywhere; }
+  .node[data-focus="true"] { border-color: #7ce6ff; background: #164158; box-shadow: 0 0 28px #71dfff48; }
+  .node[data-draft="true"] { border: 2px dashed #f4bd72; background: #33263b; box-shadow: 0 0 20px #ffcb7929; }
+  .node[aria-current="true"], .step[aria-current="true"] { outline: 1px solid #b0ebff; outline-offset: 4px; }
+  .node:hover, .step:hover { border-color: #b4dbff; }
+  .step { width: 148px; min-height: 36px; border-radius: 9px; font-size: .71rem; }
+  .step button { color: inherit; background: none; border: 0; padding: 0; }
+  .step a { color: #a6ecff; font-size: .67rem; overflow-wrap: anywhere; }
+  .flow-step { height: 54px; padding: 5px; border-color: #4ca3b8; background: #123247; cursor: grab;
+    opacity: 0; visibility: hidden; transition: opacity 160ms ease, visibility 0s linear 160ms; }
+  .flow-step[data-open="true"] { opacity: 1; visibility: visible; transition-delay: 0s; }
+  @starting-style { .flow-step[data-open="true"] { opacity: 0; } }
+  .flow-step[data-kind="error"] { border-color: #cb826c; background: #382432; }
+  .flow-step[data-focus="true"] { border-color: #a6ecff; outline: 2px solid #7ce6ff; outline-offset: 3px; background: #1c4a58; }
+  .flow-step[data-trace="dim"] { opacity: .48; }
+  .flow-step[data-trace="active"] { border-color: #ffd575; outline: 2px solid #ffd575; }
+  .flow-step.dragging { z-index: 1; cursor: grabbing; }
+  @media (prefers-reduced-motion: reduce) {
+    .node[data-subflow], .flow-step { transition: none; }
+  }
+  [hidden] { display: none !important; }
+  .proposal { position: absolute; z-index: 2; top: 12px; left: 12px; max-width: min(360px, calc(100% - 24px)); padding: 9px 12px; border: 1px solid #456078; background: #131f34f2; border-radius: 9px; font-size: .74rem; cursor: auto; }
+  .proposal[data-state="draft"], .proposal[data-state="proposed"] { border-style: dashed; border-color: #b88f60; }
+  .proposal p { margin-top: 5px; color: #c4d3ec; line-height: 1.45; }
+  .proposal code { display: block; margin-top: 4px; color: #adc6eb; overflow-wrap: anywhere; }
+  .details { position: absolute; z-index: 3; top: 12px; right: 12px; bottom: 44px; width: min(260px, calc(100% - 24px)); height: fit-content; max-height: calc(100% - 56px); overflow: auto; cursor: auto; touch-action: pan-y; padding: 13px 14px; border: 1px solid #405675; background: #111d32f5; border-radius: 10px; font-size: .8rem; line-height: 1.6; }
+  .details h2 { font-size: .93rem; padding-right: 26px; }
+  .details p { margin-top: 6px; color: #b9cae4; }
+  .details .close { position: absolute; top: 8px; right: 8px; background: none; border: 0; padding: 1px 6px; font-size: 1.15rem; }
+  .details a { display: block; margin-top: 7px; color: #a6ecff; overflow-wrap: anywhere; }
+  .hint { position: absolute; bottom: 12px; left: 12px; color: #a7badc; background: #0b1427e0; padding: 5px 8px; border-radius: 5px; font-size: .72rem; pointer-events: none; }
+  @media (max-width: 620px) {
+    header { align-items: start; flex-direction: column; }
+    .viewport { min-height: 385px; }
+    .details { top: auto; bottom: 42px; }
+    .proposal { max-width: min(270px, calc(100% - 24px)); }
+    .viewport[data-near="true"] .proposal p, .viewport[data-near="true"] .proposal code { display: none; }
+  }
+</style>
+<main>
+  <header>
+    <div><p class="project" id="project"></p><h1 id="title"></h1><p id="summary"></p></div>
+    <div class="controls">
+      <select class="control" id="project-switch" aria-label="选择项目" hidden></select>
+      <select class="control" id="trace-select" aria-label="选择追踪字段" hidden></select>
+      <button type="button" class="control" id="fit">查看全图</button>
+    </div>
+  </header>
+  <div class="viewport" id="viewport" tabindex="0" role="region" aria-label="项目星图">
+    <canvas id="links" aria-hidden="true"></canvas>
+    <canvas id="edge-highlight" aria-hidden="true"></canvas>
+    <div id="edge-tip" class="edge-tip" role="status" hidden></div>
+    <div id="world" class="world"></div>
+    <section class="proposal" id="proposal" aria-live="polite" hidden></section>
+    <section class="details" id="details" aria-label="节点详情" hidden>
+      <button type="button" class="close" id="close" aria-label="关闭节点详情">×</button>
+      <div id="details-content"></div>
+    </section>
+    <p class="hint">滚轮缩放 · 拖节点调整 · 拖空白平移 · 点节点看详情</p>
+  </div>
+</main>
+<script id="map-data" type="application/json">__FLOW_MAP_DATA__</script>
+<script>
+  const viewport = document.getElementById('viewport');
+  const canvas = document.getElementById('links');
+  const context = canvas.getContext('2d');
+  const highlightCanvas = document.getElementById('edge-highlight');
+  const highlightContext = highlightCanvas.getContext('2d');
+  const edgeTip = document.getElementById('edge-tip');
+  const world = document.getElementById('world');
+  const proposal = document.getElementById('proposal');
+  const hint = viewport.querySelector('.hint');
+  const details = document.getElementById('details');
+  const detailsContent = document.getElementById('details-content');
+  const projectSwitch = document.getElementById('project-switch');
+  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+  const camera = { x: 0, y: 0, scale: 1 };
+  const viewportSize = { width: 0, height: 0 };
+  const nodePositions = new Map();
+  const childPositions = new Map();
+  const nodeColors = { regular: '#91b7f5', focused: '#79deff', draft: '#f4bd72' };
+  const stepThreshold = 1.25;
+  const codeThreshold = 1.62;
+  const traceThreshold = 10;
+  const traceSelect = document.getElementById("trace-select");
+  let mapText = document.getElementById('map-data').textContent;
+  let map = JSON.parse(mapText);
+  let proposalText;
+  let state;
+  let nodes = new Map();
+  let edges = [];
+  let stepNodes = [];
+  let subflowSteps = new Map();
+  let subflowEdges = [];
+  let subflowLayout;
+  let groups = new Map();
+  let openSince;
+  let detailNode;
+  let detailStep;
+  let animation;
+  let cameraTarget;
+  let fadeFrame;
+  let cameraTurn;
+  let readableSince;
+  let tracePositions;
+  let edgeHits = [];
+  let hoveredEdge;
+  let routeCache = new Map();
+  let routeSignature;
+  let drag;
+  let suppressClick = false;
+
+  function element(tag, text, className) {
+    const result = document.createElement(tag);
+    if (text) result.textContent = text;
+    if (className) result.className = className;
+    return result;
+  }
+
+  function placeNear(anchor, occupied) {
+    for (let index = 0; ; index += 1) {
+      const angle = index * 2.399963 + Math.PI / 5;
+      const radius = 205 + Math.floor(index / 7) * 140;
+      const point = { x: anchor.x + Math.cos(angle) * radius, y: anchor.y + Math.sin(angle) * radius };
+      if (occupied.every(({ x, y }) => Math.abs(x - point.x) > 175 || Math.abs(y - point.y) > 115)) return point;
+    }
+  }
+
+  function setPosition(button, { x, y }) {
+    button.style.left = x + 'px';
+    button.style.top = y + 'px';
+  }
+
+  function separateNodes(pinned, passes = 12) {
+    const all = [...nodes.values()];
+    for (let pass = 0; pass < passes; pass += 1) {
+      for (let index = 0; index < all.length; index += 1) {
+        for (const other of all.slice(index + 1)) {
+          const node = all[index];
+          const dx = other.x - node.x;
+          const dy = other.y - node.y;
+          const overlapX = 225 - Math.abs(dx);
+          const overlapY = 135 - Math.abs(dy);
+          if (overlapX <= 0 || overlapY <= 0) continue;
+          const horizontal = overlapX / 225 < overlapY / 135;
+          const axis = horizontal ? 'x' : 'y';
+          const direction = Math.sign(horizontal ? dx : dy) || 1;
+          const shift = Math.min(18, horizontal ? overlapX : overlapY) * direction;
+          const share = pinned === node || pinned === other ? 1 : .5;
+          if (node !== pinned) node[axis] -= shift * share;
+          if (other !== pinned) other[axis] += shift * share;
+        }
+      }
+    }
+    for (const node of all) {
+      nodePositions.set(node.id, { x: node.x, y: node.y });
+      if (node.button) setPosition(node.button, node);
+    }
+  }
+
+  function renderGraph() {
+    const oldDetail = detailNode?.id;
+    const oldStep = detailStep?.id ?? detailStep?.title;
+    nodes = new Map();
+    const occupied = [];
+    const focus = new Set(state?.phaseIds ?? []);
+    for (const { phaseId } of state?.stepRefs ?? []) focus.add(phaseId);
+    for (const phase of map.phases) {
+      const [x, y] = phase.position ?? [];
+      const position = nodePositions.get(phase.id) ?? (Number.isFinite(x) && Number.isFinite(y) ? { x, y } : undefined);
+      const node = { ...phase, ...position };
+      nodes.set(phase.id, node);
+      if (position) occupied.push(position);
+    }
+    for (const node of nodes.values()) {
+      if (node.x === undefined) {
+        const position = placeNear({ x: 0, y: 0 }, occupied);
+        Object.assign(node, position);
+        occupied.push(position);
+      }
+      nodePositions.set(node.id, { x: node.x, y: node.y });
+    }
+    edges = map.edges.map((edge) => ({ ...edge, from: nodes.get(edge.from), to: nodes.get(edge.to) }));
+    const proposalAnchor = nodes.get(state?.phaseIds?.[0]) ?? nodes.values().next().value;
+    const names = new Map([...nodes.values()].map((node) => [node.title, node]));
+    function resolveEndpoint(name, anchor) {
+      const existing = nodes.get(name) ?? names.get(name);
+      if (existing) return existing;
+      const position = placeNear(anchor, occupied);
+      const node = { id: 'draft:' + name, title: name, draft: true, ...position };
+      Object.assign(node, nodePositions.get(node.id));
+      nodes.set(node.id, node);
+      names.set(name, node);
+      occupied.push(position);
+      return node;
+    }
+    for (const change of state?.changes ?? []) {
+      if (change.fromStep !== undefined || change.toStep !== undefined) {
+        const from = nodes.get(change.from);
+        const to = nodes.get(change.to);
+        if (from && to) edges.push({ ...change, from, to, draft: true });
+        continue;
+      }
+      const knownEndpoint = nodes.get(change.to) ?? names.get(change.to);
+      const from = resolveEndpoint(change.from, knownEndpoint ?? proposalAnchor);
+      const to = resolveEndpoint(change.to, from);
+      edges.push({ from, to, label: change.label, draft: true });
+    }
+
+    separateNodes(undefined, 24);
+
+    world.replaceChildren();
+    for (const node of nodes.values()) {
+      node.focused = focus.has(node.id);
+      const button = element('button', '', 'node');
+      button.type = 'button';
+      button.dataset.node = node.id;
+      button.dataset.focus = String(node.focused);
+      button.dataset.draft = String(Boolean(node.draft));
+      if (node.subflow) button.dataset.subflow = 'false';
+      button.append(element('strong', node.title), element('small', node.draft ? '拟新增' : node.layer));
+      setPosition(button, node);
+      button.addEventListener('click', (event) => {
+        if (suppressClick && event.detail > 0) return;
+        openNode(node);
+      });
+      world.append(button);
+      node.button = button;
+    }
+    buildSubflows();
+    if (state?.traceId && [...traceSelect.options].some((option) => option.value === state.traceId)) traceSelect.value = state.traceId;
+    const selected = nodes.get(oldDetail);
+    chooseDetail(selected, selected?.steps?.find((step) => (step.id ?? step.title) === oldStep));
+    draw();
+  }
+
+  function buildSubflows() {
+    groups = new Map();
+    subflowSteps = new Map();
+    for (const node of nodes.values()) {
+      if (!node.subflow) continue;
+      const group = { node, steps: new Map() };
+      groups.set(node.id, group);
+      for (const item of node.steps) {
+        const card = element('div', '', 'step flow-step');
+        card.dataset.step = item.id;
+        card.dataset.phase = node.id;
+        card.dataset.kind = item.kind ?? '';
+        card.dataset.focus = String((state?.stepRefs ?? []).some((ref) => ref.phaseId === node.id && ref.stepId === item.id));
+        const button = element('button', item.title);
+        button.type = 'button';
+        button.addEventListener('click', (event) => {
+          if (suppressClick && event.detail > 0) return;
+          chooseDetail(node, item);
+        });
+        card.append(button);
+        const link = item.editorUrl ? codeLink(item, true) : undefined;
+        if (link) card.append(link);
+        world.append(card);
+        const key = JSON.stringify([node.id, item.id]);
+        const [x, y] = item.position;
+        const child = { card, button, item, link, key, node, group,
+          position: childPositions.get(key) ?? { x, y } };
+        group.steps.set(item.id, child);
+        subflowSteps.set(key, child);
+      }
+      const children = [...group.steps.values()];
+      const left = Math.min(...children.map(({ item, card }) => item.position[0] - card.offsetWidth / 2));
+      const right = Math.max(...children.map(({ item, card }) => item.position[0] + card.offsetWidth / 2));
+      const top = Math.min(...children.map(({ item, card }) => item.position[1] - card.offsetHeight / 2));
+      const bottom = Math.max(...children.map(({ item, card }) => item.position[1] + card.offsetHeight / 2));
+      group.layout = { x: (left + right) / 2, y: (top + bottom) / 2,
+        compact: Math.min(node.button.offsetWidth / (right - left), node.button.offsetHeight / (bottom - top)) * 1.1 };
+      group.edges = node.subflow.edges.map((edge) => ({ ...edge, from: group.steps.get(edge.from), to: group.steps.get(edge.to) }));
+    }
+  }
+
+  function chooseDetail(node, step) {
+    detailNode?.button.removeAttribute('aria-current');
+    detailNode = node;
+    detailStep = step;
+    node?.button.setAttribute('aria-current', 'true');
+    for (const child of stepNodes) child.card.remove();
+    stepNodes = [];
+    subflowLayout = node?.subflow ? groups.get(node.id)?.layout : undefined;
+    if (node && !node.subflow) {
+      for (const item of node.steps ?? []) {
+        const card = element('div', '', 'step');
+        const button = element('button', item.title);
+        button.type = 'button';
+        button.addEventListener('click', () => selectStep(item));
+        card.append(button);
+        const link = item.editorUrl ? codeLink(item, true) : undefined;
+        if (link) card.append(link);
+        world.append(card);
+        stepNodes.push({ card, button, item, link });
+      }
+    }
+    renderDetails();
+    draw();
+  }
+
+  function selectStep(item) {
+    detailStep = item;
+    renderDetails();
+    for (const current of stepNodes) current.button.setAttribute('aria-current', String(current.item === item));
+  }
+
+  function codeLink(step, short = false) {
+    const displayPath = short ? step.file.split(/[\\/]/).at(-1) : step.file;
+    const link = element('a', displayPath + ':' + step.line + ' ↗');
+    link.href = step.editorUrl;
+    link.title = '在 VS Code 中打开对应行';
+    if (step.openUrl) {
+      link.addEventListener('click', async (event) => {
+        event.preventDefault();
+        try {
+          const result = await fetch(step.openUrl, { method: 'POST' });
+          if (result.ok) return;
+        } catch {
+          // The local preview may have been stopped.
+        }
+        link.textContent = '打开失败 · ' + step.file + ':' + step.line;
+      });
+    }
+    return link;
+  }
+
+  function renderDetails() {
+    details.hidden = !detailNode || camera.scale < stepThreshold ||
+      (!detailStep && (detailNode.subflow || viewportSize.width < 620));
+    if (details.hidden) {
+      detailsContent.replaceChildren();
+      return;
+    }
+    const node = detailNode;
+    const items = [element('h2', detailStep?.title ?? node.title)];
+    if (detailStep) {
+      if (detailStep.detail) items.push(element('p', detailStep.detail));
+      const traceItem = activeTrace()?.nodes.find((n) => n.phase === node.id && n.step === detailStep.id);
+      if (traceItem) items.push(element('p', traceItem.detail));
+      if (detailStep.editorUrl) items.push(codeLink(detailStep));
+    } else if (node.draft) {
+      items.push(element('p', '本轮方案中的节点'));
+    } else {
+      if (node.input) items.push(element('p', '传入 · ' + node.input));
+      if (node.output) items.push(element('p', '传出 · ' + node.output));
+      if (camera.scale >= codeThreshold) {
+        for (const step of node.steps ?? []) if (step.editorUrl) items.push(codeLink(step));
+      }
+    }
+    detailsContent.replaceChildren(...items);
+  }
+
+  function endpoint(node, dx, dy) {
+    const distance = Math.min(node.halfWidth / Math.max(.01, Math.abs(dx)),
+      node.halfHeight / Math.max(.01, Math.abs(dy)));
+    return { x: node.x + dx * distance, y: node.y + dy * distance };
+  }
+
+  function drawEdge(edge, geometry, reverse, labelBoxes, edgeLabels) {
+    const { from, to } = edge;
+    if (!from || !to) return;
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const length = Math.hypot(dx, dy);
+    const loop = length < 1;
+    const scale = edge.innerScale ?? 1;
+    const bends = edge.innerScale ? [0, -70, 70, -130, 130] :
+      reverse ? [92, 170, 250] : [0, -130, 130, -240, 240, -340, 340];
+    const routeKey = JSON.stringify([from.key ?? from.id, to.key ?? to.id, from.x, from.y, to.x, to.y, from.halfWidth, from.halfHeight, to.halfWidth, to.halfHeight, scale, reverse]);
+    let control = routeCache.get(routeKey) ?? { x: from.x, y: from.y - 120 };
+    let best = Infinity;
+    if (!loop && !routeCache.has(routeKey)) {
+      for (const amount of bends) {
+        const bend = amount * scale;
+        const point = { x: (from.x + to.x) / 2 - dy / length * bend,
+          y: (from.y + to.y) / 2 + dx / length * bend };
+        let score = Math.abs(bend) * .01;
+        for (let index = 2; index < 19; index += 1) {
+          const t = index / 20;
+          const x = (1 - t) ** 2 * from.x + 2 * (1 - t) * t * point.x + t ** 2 * to.x;
+          const y = (1 - t) ** 2 * from.y + 2 * (1 - t) * t * point.y + t ** 2 * to.y;
+          for (const node of geometry) {
+            if (node !== from && node !== to &&
+                Math.abs(node.x - x) < node.halfWidth + 12 * scale &&
+                Math.abs(node.y - y) < node.halfHeight + 10 * scale) score += 100;
+          }
+        }
+        if (score < best) { best = score; control = point; }
+      }
+    }
+    routeCache.set(routeKey, control);
+    const start = loop ? { x: from.x + 35, y: from.y - 25 } : endpoint(from, control.x - from.x, control.y - from.y);
+    const end = loop ? { x: to.x - 35, y: to.y - 25 } : endpoint(to, control.x - to.x, control.y - to.y);
+    const color = edge.traceDraft ? '#ffbb68' : edge.trace ? '#ffd575' : edge.kind === 'error' ? '#f0a38e' : edge.draft ? nodeColors.draft :
+      from.focused && to.focused ? nodeColors.focused : nodeColors.regular;
+    context.strokeStyle = color;
+    context.lineWidth = edge.trace ? 1.8 / camera.scale : edge.draft ? 1.5 : 1 / camera.scale;
+    context.globalAlpha = (edge.draft || edge.kind === 'error' ? .9 : .65) * (edge.opacity ?? 1);
+    context.setLineDash(edge.traceDraft ? [7 / camera.scale, 5 / camera.scale] : edge.draft ? [6, 5] : []);
+    context.beginPath();
+    context.moveTo(start.x, start.y);
+    context.quadraticCurveTo(control.x, control.y, end.x, end.y);
+    context.stroke();
+    context.setLineDash([]);
+    function arrowHead(point, size, headColor) {
+      const angle = Math.atan2(point.y - control.y, point.x - control.x);
+      context.fillStyle = headColor;
+      context.beginPath();
+      context.moveTo(point.x, point.y);
+      context.lineTo(point.x - size * Math.cos(angle - .46), point.y - size * Math.sin(angle - .46));
+      context.lineTo(point.x - size * Math.cos(angle + .46), point.y - size * Math.sin(angle + .46));
+      context.closePath();
+      context.fill();
+      return [point, { x: point.x - size * Math.cos(angle - .46), y: point.y - size * Math.sin(angle - .46) },
+        { x: point.x - size * Math.cos(angle + .46), y: point.y - size * Math.sin(angle + .46) }];
+    }
+    const endArrow = arrowHead(end, edge.arrowSize ?? 9, color);
+    const startArrow = edge.return ? arrowHead(start, 9 / camera.scale, edge.return.kind === 'error' ? '#f0a38e' : color) : undefined;
+    const hit = { edge, start, end, control, endArrow, startArrow, segments: flattenCurve(start, control, end) };
+    edgeHits.push(hit);
+
+    if (camera.scale >= .44 && edge.label && !edge.hideLabel) {
+      context.globalAlpha = 1;
+      const fontSize = edge.expanded ? 14 / camera.scale : Math.max(11, 8.5 / camera.scale);
+      const lineHeight = fontSize * 1.34;
+      const maxWidth = edge.expanded ? 190 / camera.scale : 165;
+      context.font = fontSize + 'px Geist, "Microsoft YaHei", sans-serif';
+      context.textAlign = 'center';
+      const lines = [''];
+      for (const token of edge.label.match(/[\w.-]+|./gu) ?? []) {
+        if (lines.at(-1) && context.measureText(lines.at(-1) + token).width > maxWidth) lines.push('');
+        lines[lines.length - 1] += token;
+      }
+      const width = Math.max(...lines.map((line) => context.measureText(line).width)) + 12;
+      const height = lines.length * lineHeight + 6;
+      let position;
+      let best = Infinity;
+      const blocked = [...labelBoxes, ...geometry.map((node) => ({
+        x: node.x, y: node.y, width: node.halfWidth * 2 + 10, height: node.halfHeight * 2 + 10,
+      }))];
+      const offsets = (from.item || to.item) && !loop ? [0, -19, 19, -36, 36] : [0];
+      for (const t of [.5, .35, .65, .25, .75]) {
+        const anchorX = (1 - t) ** 2 * start.x + 2 * (1 - t) * t * control.x + t ** 2 * end.x;
+        const anchorY = (1 - t) ** 2 * start.y + 2 * (1 - t) * t * control.y + t ** 2 * end.y;
+        for (const offset of offsets) {
+          const x = anchorX - (loop ? 0 : dy / length * offset);
+          const y = anchorY - 12 + (loop ? 0 : dx / length * offset);
+          let score = Math.abs(t - .5) + Math.abs(offset) / 20;
+          for (const box of blocked) {
+            score += Math.max(0, (width + box.width) / 2 - Math.abs(x - box.x)) *
+              Math.max(0, (height + box.height) / 2 - Math.abs(y - box.y));
+          }
+          if (score < best) { best = score; position = { x, y, width, height, t }; }
+        }
+      }
+      labelBoxes.push(position);
+      hit.label = position;
+      edgeLabels.push({ ...position, lines, font: context.font, lineHeight, opacity: edge.opacity ?? 1,
+        color: edge.trace || edge.draft || edge.kind === 'error' ? color : '#c0d1ef' });
+    }
+  }
+
+  function expandedNode() { return camera.scale >= stepThreshold; }
+  function subflowScale(group) {
+    const layout = group?.layout ?? subflowLayout;
+    return layout ? Math.min(1, layout.compact * Math.min(1.2, Math.max(1, camera.scale / stepThreshold) ** 2.8)) : 1;
+  }
+  // Compute a stable third-layer layout once; no simulation runs while dragging.
+  function baseStepPosition(step) {
+    const size = subflowScale(step.group);
+    return { x: step.node.x + (step.position.x - step.group.layout.x) * size,
+      y: step.node.y + (step.position.y - step.group.layout.y) * size };
+  }
+  function ensureTraceLayout() {
+    if (tracePositions) return;
+    const all = [...subflowSteps.values()];
+    const center = all.reduce((sum, step) => ({ x: sum.x + step.node.x / all.length, y: sum.y + step.node.y / all.length }), { x: 0, y: 0 });
+    const points = new Map(all.map((step) => {
+      const base = baseStepPosition(step);
+      const x = center.x + (step.node.x - center.x) * .76 + (base.x - step.node.x) * .86;
+      const y = center.y + (step.node.y - center.y) * .76 + (base.y - step.node.y) * .86;
+      const size = subflowScale(step.group) * .78;
+      return [step.key, { x, y, originX: x, originY: y,
+        halfWidth: step.card.offsetWidth * size / 2, halfHeight: step.card.offsetHeight * size / 2 }];
+    }));
+    const links = [];
+    for (const group of groups.values()) for (const edge of group.edges) links.push([edge.from, edge.to]);
+    for (const edge of map.edges) {
+      const from = groups.get(edge.from)?.steps.get(edge.fromStep), to = groups.get(edge.to)?.steps.get(edge.toStep);
+      if (from && to) links.push([from, to]);
+    }
+    for (let pass = 0; pass < 90; pass++) {
+      for (const [from, to] of links) {
+        const a = points.get(from.key), b = points.get(to.key);
+        const dx = b.x - a.x, dy = b.y - a.y, distance = Math.hypot(dx, dy) || 1;
+        // Cross-stage links receive a gentle pull without forcing connected cards together.
+        const desired = from.node === to.node ? 38 : 95;
+        const pull = Math.max(0, distance - desired) * .012;
+        a.x += dx / distance * pull; a.y += dy / distance * pull;
+        b.x -= dx / distance * pull; b.y -= dy / distance * pull;
+      }
+      for (const point of points.values()) {
+        point.x += (point.originX - point.x) * .015;
+        point.y += (point.originY - point.y) * .015;
+      }
+      const values = [...points.values()];
+      for (let i = 0; i < values.length; i++) for (let j = i + 1; j < values.length; j++) {
+        const a = values[i], b = values[j], dx = b.x - a.x, dy = b.y - a.y;
+        const overlapX = a.halfWidth + b.halfWidth + 3 - Math.abs(dx);
+        const overlapY = a.halfHeight + b.halfHeight + 3 - Math.abs(dy);
+        if (overlapX > 0 && overlapY > 0) {
+          if (overlapX < overlapY) { const shift = overlapX * .51 * (Math.sign(dx) || 1); a.x -= shift; b.x += shift; }
+          else { const shift = overlapY * .51 * (Math.sign(dy) || 1); a.y -= shift; b.y += shift; }
+        }
+      }
+    }
+    tracePositions = points;
+  }
+  function activeTrace() {
+    return camera.scale >= traceThreshold ? (map.traces ?? []).find((t) => t.id === traceSelect.value) : undefined;
+  }
+  function visibleEdges(expanded) {
+    function attach(edge) {
+      const from = edge.from.subflow ? groups.get(edge.from.id)?.steps.get(edge.fromStep) : edge.from;
+      const to = edge.to.subflow ? groups.get(edge.to.id)?.steps.get(edge.toStep) : edge.to;
+      return from && to ? [{ ...edge, from, to }] : [];
+    }
+    const outer = edges.flatMap((edge) => {
+      if (!expanded) {
+        if (edge.from === edge.to && (edge.fromStep || edge.toStep)) return [];
+        return [edge.overviewLabel ? { ...edge, label: edge.overviewLabel } : edge];
+      }
+      if (!edge.from.subflow && !edge.to.subflow) return [edge];
+      const { return: reverse, ...forward } = edge;
+      return [...attach(forward), ...(reverse ? attach({ ...reverse, from: edge.to, to: edge.from }) : [])];
+    });
+    const normal = expanded ? [...[...groups.values()].flatMap((group) => group.edges), ...outer] : outer;
+    const trace = activeTrace();
+    if (!trace) return normal;
+    const key = (from, to) => JSON.stringify([from?.key ?? from?.id, to?.key ?? to?.id]);
+    const resolved = (edge) => ({ ...edge, from: groups.get(edge.from.phase)?.steps.get(edge.from.step),
+      to: groups.get(edge.to.phase)?.steps.get(edge.to.step) });
+    const highlighted = new Map();
+    for (const item of trace.edges) {
+      const edge = resolved(item);
+      if (edge.from && edge.to) highlighted.set(key(edge.from, edge.to), { ...edge, trace: true });
+    }
+    if (state?.traceId === trace.id) for (const item of state.traceChanges ?? []) {
+      const edge = resolved(item);
+      if (!edge.from || !edge.to) continue;
+      const id = key(edge.from, edge.to);
+      const previous = highlighted.get(id);
+      highlighted.set(id, { ...edge, label: (previous ? '现状：' + previous.label + '；' : '') + (edge.operation === 'remove' ? '拟议移除：' : '拟议：') + edge.label,
+        trace: true, traceDraft: true });
+    }
+    const background = normal.filter((edge) => !highlighted.has(key(edge.from, edge.to)))
+      .map((edge) => ({ ...edge, context: true }));
+    return [...background, ...highlighted.values()];
+  }
+
+  function draw() {
+    clearEdgeHover();
+    const density = devicePixelRatio || 1;
+    context.setTransform(density, 0, 0, density, 0, 0);
+    context.clearRect(0, 0, viewportSize.width, viewportSize.height);
+    context.translate(camera.x, camera.y);
+    context.scale(camera.scale, camera.scale);
+    world.style.transform = 'translate(' + camera.x + 'px,' + camera.y + 'px) scale(' + camera.scale + ')';
+    world.style.setProperty('--label-scale', Math.max(1, .73 / camera.scale));
+    viewport.dataset.near = String(camera.scale >= stepThreshold);
+    const expanded = expandedNode();
+    const trace = activeTrace();
+    if (trace) ensureTraceLayout();
+    edgeHits = [];
+    traceSelect.hidden = !(map.traces?.length && camera.scale >= traceThreshold);
+    viewport.dataset.level = trace ? '3' : expanded ? '2' : '1';
+    const geometry = [];
+    for (const node of nodes.values()) {
+      if (node.subflow) {
+        node.button.dataset.subflow = String(expanded);
+        node.button.inert = expanded;
+      }
+      if (expanded && node.subflow) continue;
+      node.halfWidth = node.button.offsetWidth / 2 + 1;
+      node.halfHeight = node.button.offsetHeight / 2 + 1;
+      geometry.push(node);
+    }
+    for (const group of groups.values()) {
+      const childScale = subflowScale(group) * (trace ? .78 : 1);
+      for (const step of group.steps.values()) {
+        step.card.dataset.open = String(expanded);
+        step.card.inert = !expanded;
+        step.card.dataset.trace = trace ? ((trace.nodes.some((n) => n.phase === group.node.id && n.step === step.item.id) || (state?.traceId === trace.id && (state.traceChanges ?? []).some((e) => [e.from, e.to].some((n) => n.phase === group.node.id && n.step === step.item.id)))) ? 'active' : 'dim') : '';
+        if (step.link) step.link.hidden = camera.scale * childScale < 1;
+        const { x, y } = trace ? tracePositions.get(step.key) : baseStepPosition(step);
+        Object.assign(step, { x, y,
+          halfWidth: step.card.offsetWidth * childScale / 2 + 1,
+          halfHeight: step.card.offsetHeight * childScale / 2 + 1 });
+        setPosition(step.card, step);
+        step.card.style.transform = 'translate(-50%, -50%) scale(' + childScale + ')';
+        if (expanded) geometry.push(step);
+      }
+    }
+    hint.textContent = trace ? '金色：追踪字段 · 橙色虚线：拟议 · 淡色：上下文 · 点线前往目标' : expanded ?
+      '全图子流程 · 滚轮缩放 · 点线前往目标 · 拖步骤调整' :
+      '滚轮缩放 · 拖节点调整 · 拖空白平移 · 点节点看详情';
+    if (!expanded) openSince = undefined;
+    else if (openSince === undefined) openSince = performance.now();
+    const fade = expanded && !reducedMotion.matches ? Math.min(1, (performance.now() - openSince) / 160) : 1;
+    cancelAnimationFrame(fadeFrame);
+    if (fade < 1) fadeFrame = requestAnimationFrame(draw);
+    const signature = JSON.stringify(geometry.map((item) => [item.x, item.y, item.halfWidth, item.halfHeight]));
+    if ((!drag?.moved || (!drag.step && !drag.node)) && routeSignature !== signature) routeCache.clear();
+    routeSignature = signature;
+    const arrows = visibleEdges(expanded);
+    const labelBoxes = [];
+    const edgeLabels = [];
+    for (const edge of arrows) {
+      const childEdge = edge.from?.item || edge.to?.item;
+      const inner = edge.from?.item && edge.to?.item;
+      const childScale = inner ? Math.min(subflowScale(edge.from.group), subflowScale(edge.to.group)) : 1;
+      const style = childEdge ? { innerScale: inner ? childScale : undefined,
+        arrowSize: edge.trace ? 9 / camera.scale : inner ? Math.max(2.5, 9 * childScale) : 9 / camera.scale, opacity: edge.context ? .3 : inner ? fade : 1,
+        hideLabel: edge.context || (!edge.trace && camera.scale * childScale < .62) } : {};
+      drawEdge({ ...edge, ...style, expanded: Boolean(expanded) }, geometry,
+        arrows.some((other) => other !== edge && other.from === edge.to && other.to === edge.from),
+        labelBoxes, edgeLabels);
+    }
+    context.globalAlpha = 1;
+    for (const { x, y, width, height, lines, color, font, lineHeight, opacity } of edgeLabels) {
+      context.globalAlpha = opacity;
+      context.fillStyle = '#111b33';
+      context.fillRect(x - width / 2, y - height / 2, width, height);
+      context.fillStyle = color;
+      context.font = font;
+      for (const [index, line] of lines.entries()) context.fillText(line, x, y - height / 2 + 3 + (index + .86) * lineHeight);
+    }
+    context.globalAlpha = 1;
+    if (!stepNodes.length) return;
+    context.globalAlpha = .45;
+    context.strokeStyle = '#8fbde8';
+    context.lineWidth = 1;
+    const blocked = [...nodes.values()].map((node) => ({
+      x: camera.x + node.x * camera.scale, y: camera.y + node.y * camera.scale,
+      width: node.button.offsetWidth * camera.scale + 20, height: node.button.offsetHeight * camera.scale + 18,
+    }));
+    if (!details.hidden) {
+      const panel = details.getBoundingClientRect();
+      const bounds = viewport.getBoundingClientRect();
+      blocked.push({ x: panel.x - bounds.x + panel.width / 2, y: panel.y - bounds.y + panel.height / 2,
+        width: panel.width + 16, height: panel.height + 16 });
+    }
+    for (const step of stepNodes) {
+      step.card.hidden = camera.scale < stepThreshold;
+      if (step.link) step.link.hidden = camera.scale < codeThreshold;
+      if (step.card.hidden) continue;
+      const width = step.card.offsetWidth + 16;
+      const height = step.card.offsetHeight + 16;
+      const anchorX = camera.x + detailNode.x * camera.scale;
+      const anchorY = camera.y + detailNode.y * camera.scale;
+      let position;
+      let best = Infinity;
+      for (const radius of [175, 240, 315]) {
+        for (let index = 0; index < 12; index += 1) {
+          const angle = index * Math.PI / 6 - Math.PI / 2;
+          const x = Math.max(width / 2 + 8, Math.min(viewportSize.width - width / 2 - 8, anchorX + Math.cos(angle) * radius));
+          const y = Math.max(height / 2 + 8, Math.min(viewportSize.height - height / 2 - 38, anchorY + Math.sin(angle) * radius));
+          let overlap = 0;
+          for (const box of blocked) {
+            overlap += Math.max(0, (width + box.width) / 2 - Math.abs(x - box.x)) *
+              Math.max(0, (height + box.height) / 2 - Math.abs(y - box.y));
+          }
+          const score = overlap + radius * .02;
+          if (score < best) { best = score; position = { x, y, width, height }; }
+        }
+      }
+      blocked.push(position);
+      const x = (position.x - camera.x) / camera.scale;
+      const y = (position.y - camera.y) / camera.scale;
+      setPosition(step.card, { x, y });
+      step.card.style.transform = 'translate(-50%, -50%) scale(' + 1 / camera.scale + ')';
+      context.beginPath();
+      context.moveTo(detailNode.x, detailNode.y);
+      context.lineTo(x, y);
+      context.stroke();
+    }
+    context.globalAlpha = 1;
+  }
+
+  function updateCamera(next) {
+    const before = camera.scale;
+    Object.assign(camera, next);
+    if (camera.scale < 5) readableSince = undefined;
+    else if (readableSince === undefined) readableSince = performance.now();
+    if ((before < stepThreshold) !== (camera.scale < stepThreshold) ||
+      (before < codeThreshold) !== (camera.scale < codeThreshold) ||
+      (before < traceThreshold) !== (camera.scale < traceThreshold)) renderDetails();
+    draw();
+  }
+
+  function stopCamera() {
+    cancelAnimationFrame(animation);
+    cameraTarget = undefined;
+  }
+
+  function panTo(next, animate, duration = 370) {
+    stopCamera();
+    if (!animate || reducedMotion.matches) {
+      updateCamera(next);
+      return;
+    }
+    cameraTarget = next;
+    const previous = { ...camera };
+    const start = performance.now();
+    function tick(now) {
+      const progress = Math.min(1, (now - start) / duration);
+      if (progress === 1) {
+        cameraTarget = undefined;
+        updateCamera(next);
+        return;
+      }
+      const eased = 1 - (1 - progress) ** 3;
+      updateCamera({
+        x: previous.x + (next.x - previous.x) * eased,
+        y: previous.y + (next.y - previous.y) * eased,
+        scale: previous.scale + (next.scale - previous.scale) * eased,
+      });
+      animation = requestAnimationFrame(tick);
+    }
+    animation = requestAnimationFrame(tick);
+  }
+
+  function centerOn(point, scale = camera.scale, animate = true) {
+    panTo({
+      x: viewportSize.width / 2 - point.x * scale,
+      y: viewportSize.height / 2 - point.y * scale,
+      scale,
+    }, animate);
+  }
+
+  function openNode(node) {
+    chooseDetail(node);
+    if (node.subflow) {
+      const x = camera.x + node.x * camera.scale;
+      const y = camera.y + node.y * camera.scale;
+      const scale = Math.max(camera.scale, stepThreshold);
+      panTo({ x: x - node.x * scale, y: y - node.y * scale, scale }, true, 160);
+    } else {
+      centerOn(node, Math.max(camera.scale, stepThreshold + .08));
+    }
+  }
+
+  function fit(animate) {
+    const all = [...nodes.values()];
+    if (!all.length) return;
+    const left = Math.min(...all.map(({ x }) => x)) - 118;
+    const right = Math.max(...all.map(({ x }) => x)) + 118;
+    const top = Math.min(...all.map(({ y }) => y)) - 95;
+    const bottom = Math.max(...all.map(({ y }) => y)) + 95;
+    const scale = Math.max(.2, Math.min(1.1, viewportSize.width / (right - left), viewportSize.height / (bottom - top)));
+    centerOn({ x: (left + right) / 2, y: (top + bottom) / 2 }, scale, animate);
+  }
+
+  function focusProposal() {
+    if (!state || !viewportSize.width || drag) return;
+    const childParents = new Set((state.stepRefs ?? []).map(({ phaseId }) => phaseId));
+    for (const edge of state.changes ?? []) {
+      if (edge.fromStep) childParents.add(edge.from);
+      if (edge.toStep) childParents.add(edge.to);
+    }
+    const focused = childParents.size ? [...childParents] : (state.phaseIds ?? []);
+    const signature = JSON.stringify([state.turn, focused, childParents.size > 0]);
+    if (cameraTurn === signature || focused.length !== 1) return;
+    const node = nodes.get(focused[0]);
+    if (node) {
+      cameraTurn = signature;
+      chooseDetail(node);
+      centerOn(node, childParents.size ? Math.max(camera.scale, 1.9) : camera.scale);
+    }
+  }
+
+  function selectNear(x, y) {
+    let nearest;
+    let distance = Infinity;
+    for (const node of nodes.values()) {
+      const next = Math.hypot(node.x - x, node.y - y);
+      if (next < distance) {
+        nearest = node;
+        distance = next;
+      }
+    }
+    const retainedDistance = detailNode ? Math.hypot(detailNode.x - x, detailNode.y - y) : Infinity;
+    if (nearest && (distance <= 110 || !detailNode || distance + 115 < retainedDistance)) {
+      if (nearest !== detailNode) chooseDetail(nearest);
+    }
+  }
+
+  function zoom(x, y, factor, hoveredNode) {
+    const point = { x: (x - camera.x) / camera.scale, y: (y - camera.y) / camera.scale };
+    const previousScale = cameraTarget?.scale ?? camera.scale;
+    let scale = Math.min(20, Math.max(.2, previousScale * factor));
+    if (previousScale < stepThreshold && scale >= stepThreshold) scale = stepThreshold;
+    // An inertial wheel burst must actually display a readable second layer first.
+    if (factor > 1 && camera.scale < traceThreshold && scale >= traceThreshold &&
+        (readableSince === undefined || performance.now() - readableSince < 300)) scale = traceThreshold * .9;
+    const crossing = Boolean(map.traces?.length) && (camera.scale < traceThreshold) !== (scale < traceThreshold);
+    if (crossing) {
+      ensureTraceLayout();
+      const entering = scale >= traceThreshold;
+      const children = [...subflowSteps.values()];
+      const source = (step) => entering ? baseStepPosition(step) : tracePositions.get(step.key);
+      const target = (step) => entering ? tracePositions.get(step.key) : baseStepPosition(step);
+      const nearest = children.reduce((best, step) => !best || Math.hypot(source(step).x - point.x, source(step).y - point.y) <
+        Math.hypot(source(best).x - point.x, source(best).y - point.y) ? step : best, undefined);
+      const before = nearest && source(nearest), after = nearest && target(nearest);
+      panTo({ x: x - point.x * scale + (before ? (before.x - after.x) * scale : 0),
+        y: y - point.y * scale + (before ? (before.y - after.y) * scale : 0), scale }, false);
+      return;
+    }
+    panTo({ x: x - point.x * scale, y: y - point.y * scale, scale }, true, 150);
+  }
+
+  viewport.addEventListener('wheel', (event) => {
+    if (event.target.closest('.details') || drag) return;
+    event.preventDefault();
+    const bounds = viewport.getBoundingClientRect();
+    const delta = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? bounds.height : 1);
+    const hoveredNode = nodes.get(event.target.closest('.node')?.dataset.node);
+    zoom(event.clientX - bounds.left, event.clientY - bounds.top,
+      Math.exp(-Math.max(-180, Math.min(180, delta)) * .0024), hoveredNode);
+  }, { passive: false });
+
+  // Adaptive quadratic subdivision gives at most half a screen pixel of error,
+  // even when the rendered line is very long at high zoom.
+  function flattenCurve(start, control, end) {
+    const segments = [];
+    function split(a, b, c, t0, t1, depth) {
+      const dx = c.x - a.x, dy = c.y - a.y;
+      const length = Math.hypot(dx, dy);
+      const flat = length ? Math.abs(dy * b.x - dx * b.y + c.x * a.y - c.y * a.x) / length : Math.hypot(b.x - a.x, b.y - a.y);
+      if (flat * camera.scale <= .5 || depth >= 16) { segments.push({ a, b: c, t0, t1 }); return; }
+      const ab = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+      const bc = { x: (b.x + c.x) / 2, y: (b.y + c.y) / 2 };
+      const mid = { x: (ab.x + bc.x) / 2, y: (ab.y + bc.y) / 2 }, tm = (t0 + t1) / 2;
+      split(a, ab, mid, t0, tm, depth + 1); split(mid, bc, c, tm, t1, depth + 1);
+    }
+    split(start, control, end, 0, 1, 0);
+    return segments;
+  }
+  function segmentDistance(x, y, a, b) {
+    const dx = b.x - a.x, dy = b.y - a.y, length2 = dx * dx + dy * dy;
+    const fraction = length2 ? Math.max(0, Math.min(1, ((x - a.x) * dx + (y - a.y) * dy) / length2)) : 0;
+    return { distance: Math.hypot(x - a.x - dx * fraction, y - a.y - dy * fraction) * camera.scale, fraction };
+  }
+  function hitEdge(clientX, clientY) {
+    const bounds = viewport.getBoundingClientRect();
+    const x = (clientX - bounds.left - camera.x) / camera.scale;
+    const y = (clientY - bounds.top - camera.y) / camera.scale;
+    let best;
+    function consider(hit, t, distance, kind, index) {
+      if (distance > (kind === 'label' ? 7 : 11)) return;
+      // Prefer the nearest visible feature; for exact overlap prefer the last drawn edge.
+      if (!best || distance < best.distance - .01 || (Math.abs(distance - best.distance) <= .01 && index > best.index))
+        best = { hit, t, distance, kind, index };
+    }
+    edgeHits.forEach((hit, index) => {
+      if (hit.label) {
+        const box = hit.label;
+        const dx = Math.max(0, Math.abs(x - box.x) - box.width / 2);
+        const dy = Math.max(0, Math.abs(y - box.y) - box.height / 2);
+        consider(hit, box.t ?? .75, Math.hypot(dx, dy) * camera.scale, 'label', index);
+      }
+      for (const segment of hit.segments) {
+        const result = segmentDistance(x, y, segment.a, segment.b);
+        consider(hit, segment.t0 + (segment.t1 - segment.t0) * result.fraction, result.distance, 'curve', index);
+      }
+      for (const [arrow, t] of [[hit.endArrow, 1], [hit.startArrow, 0]]) if (arrow) {
+        for (let i = 0; i < 3; i++) consider(hit, t, segmentDistance(x, y, arrow[i], arrow[(i + 1) % 3]).distance, 'arrow', index);
+      }
+    });
+    return best;
+  }
+  function edgeDestination(match) {
+    return match.hit.edge.return && match.t < .5 ? match.hit.edge.from : match.hit.edge.to;
+  }
+  function clearEdgeHover() {
+    if (!hoveredEdge && edgeTip.hidden) return;
+    hoveredEdge = undefined;
+    viewport.classList.remove('edge-hover');
+    edgeTip.hidden = true;
+    highlightContext.setTransform(1, 0, 0, 1, 0, 0);
+    highlightContext.clearRect(0, 0, highlightCanvas.width, highlightCanvas.height);
+  }
+  function showEdgeHover(match, clientX, clientY) {
+    const target = edgeDestination(match), hit = match.hit;
+    const density = devicePixelRatio || 1;
+    if (!hoveredEdge || hoveredEdge.hit !== hit || edgeDestination(hoveredEdge) !== target) {
+      highlightContext.setTransform(1, 0, 0, 1, 0, 0);
+      highlightContext.clearRect(0, 0, highlightCanvas.width, highlightCanvas.height);
+      highlightContext.setTransform(density * camera.scale, 0, 0, density * camera.scale, density * camera.x, density * camera.y);
+      highlightContext.strokeStyle = '#fff0a1';
+      highlightContext.lineWidth = 3.5 / camera.scale;
+      highlightContext.shadowColor = '#ffd86a'; highlightContext.shadowBlur = 9 / camera.scale;
+      highlightContext.beginPath(); highlightContext.moveTo(hit.start.x, hit.start.y);
+      highlightContext.quadraticCurveTo(hit.control.x, hit.control.y, hit.end.x, hit.end.y); highlightContext.stroke();
+      const arrow = hit.edge.return && match.t < .5 ? hit.startArrow : hit.endArrow;
+      if (arrow) { highlightContext.fillStyle = '#fff0a1'; highlightContext.beginPath(); highlightContext.moveTo(arrow[0].x, arrow[0].y); highlightContext.lineTo(arrow[1].x, arrow[1].y); highlightContext.lineTo(arrow[2].x, arrow[2].y); highlightContext.closePath(); highlightContext.fill(); }
+      if (hit.label) { const box = hit.label; highlightContext.shadowBlur = 0; highlightContext.strokeRect(box.x - box.width / 2, box.y - box.height / 2, box.width, box.height); }
+      edgeTip.textContent = '点击跳到' + (target.item?.title ?? target.title);
+    }
+    hoveredEdge = match;
+    viewport.classList.add('edge-hover'); edgeTip.hidden = false;
+    const rect = viewport.getBoundingClientRect();
+    edgeTip.style.left = Math.max(0, Math.min(viewportSize.width - edgeTip.offsetWidth - 6, clientX - rect.left + 14)) + 'px';
+    edgeTip.style.top = Math.max(0, Math.min(viewportSize.height - edgeTip.offsetHeight - 6, clientY - rect.top + 14)) + 'px';
+  }
+
+  viewport.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0) return;
+    clearEdgeHover();
+    if (event.target.closest('a')) return;
+    const node = nodes.get(event.target.closest('.node')?.dataset.node);
+    const stepCard = event.target.closest('.flow-step');
+    const step = stepCard ? subflowSteps.get(JSON.stringify([stepCard.dataset.phase, stepCard.dataset.step])) : undefined;
+    if (!node && !step && event.target.closest('button, .step, .details, .proposal')) return;
+    stopCamera();
+    suppressClick = false;
+    const tracePoint = step && activeTrace() ? tracePositions.get(step.key) : undefined;
+    const edgeHit = !node && !step ? hitEdge(event.clientX, event.clientY) : undefined;
+    drag = { edgeHit, traceDrag: Boolean(tracePoint), id: event.pointerId, startX: event.clientX, startY: event.clientY, moved: false,
+      node, step, x: tracePoint?.x ?? step?.position.x ?? node?.x ?? camera.x, y: tracePoint?.y ?? step?.position.y ?? node?.y ?? camera.y };
+    viewport.setPointerCapture(event.pointerId);
+    viewport.classList.add('dragging');
+  });
+  viewport.addEventListener('pointermove', (event) => {
+    if (!drag) {
+      if (event.buttons || event.target.closest('.node, .step, a, button, .details, .proposal')) { clearEdgeHover(); return; }
+      const match = hitEdge(event.clientX, event.clientY);
+      if (match) showEdgeHover(match, event.clientX, event.clientY);
+      else clearEdgeHover();
+      return;
+    }
+    if (drag.id !== event.pointerId) return;
+    const dx = event.clientX - drag.startX;
+    const dy = event.clientY - drag.startY;
+    if (!drag.moved && Math.hypot(dx, dy) < 5) return;
+    drag.moved = true;
+    if (drag.step) {
+      if (drag.traceDrag) {
+        const point = tracePositions.get(drag.step.key);
+        point.x = drag.x + dx / camera.scale; point.y = drag.y + dy / camera.scale;
+      } else {
+        const scale = camera.scale * subflowScale(drag.step.group);
+        drag.step.position = { x: drag.x + dx / scale, y: drag.y + dy / scale };
+        childPositions.set(drag.step.key, drag.step.position);
+      }
+      drag.step.card.classList.add('dragging');
+      draw();
+    } else if (drag.node) {
+      const node = drag.node;
+      node.button.classList.add('dragging');
+      chooseDetail(node);
+      node.x = drag.x + dx / camera.scale;
+      node.y = drag.y + dy / camera.scale;
+      separateNodes(node, 3);
+      draw();
+    } else {
+      updateCamera({ x: drag.x + dx, y: drag.y + dy });
+    }
+  });
+  function finishDrag(event) {
+    if (drag?.id !== event.pointerId) return;
+    if (drag.node && drag.moved) {
+      separateNodes(drag.node, 30);
+      drag.node.button.classList.remove('dragging');
+      draw();
+    }
+    drag.step?.card.classList.remove('dragging');
+    if (drag.moved && (drag.step || drag.node)) { routeCache.clear(); draw(); }
+    suppressClick = drag.moved;
+    // Pointer capture retargets clicks to the viewport.
+    if (!drag.moved && event.type === 'pointerup') {
+      if (drag.step) chooseDetail(drag.step.node, drag.step.item);
+      if (drag.node) openNode(drag.node);
+      if (drag.edgeHit && !drag.step && !drag.node) {
+        const destination = edgeDestination(drag.edgeHit);
+        centerOn(destination, camera.scale, true);
+      }
+      suppressClick = Boolean(drag.node || drag.step);
+    }
+    drag = undefined;
+    viewport.classList.remove('dragging');
+    if (viewport.hasPointerCapture(event.pointerId)) viewport.releasePointerCapture(event.pointerId);
+    focusProposal();
+  }
+  viewport.addEventListener('pointerleave', clearEdgeHover);
+  viewport.addEventListener('pointerup', finishDrag);
+  viewport.addEventListener('pointercancel', finishDrag);
+  viewport.addEventListener('lostpointercapture', finishDrag);
+  viewport.addEventListener('keydown', (event) => {
+    if (event.target !== viewport) return;
+    const shifts = { ArrowLeft: [60, 0], ArrowRight: [-60, 0], ArrowUp: [0, 60], ArrowDown: [0, -60] };
+    if (shifts[event.key]) {
+      event.preventDefault();
+      stopCamera();
+      const [x, y] = shifts[event.key];
+      updateCamera({ x: camera.x + x, y: camera.y + y });
+    } else if (['+', '=', '-'].includes(event.key)) {
+      event.preventDefault();
+      zoom(viewportSize.width / 2, viewportSize.height / 2, event.key === '-' ? .82 : 1.22);
+    }
+  });
+
+  function renderProposal() {
+    proposal.hidden = !state;
+    if (!state) return;
+    proposal.dataset.state = state.state;
+    const titles = { awaiting: '等待本轮图更新', focused: '本轮关注', draft: '本轮方案 · 讨论中', proposed: '本轮提案 · 待实施' };
+    proposal.replaceChildren(element('strong', titles[state.state]));
+    if (state.summary) proposal.append(element('p', state.summary));
+    for (const file of state.files ?? []) proposal.append(element('code', file));
+  }
+
+  function renderHeader() {
+    const selectedTrace = traceSelect.value;
+    traceSelect.replaceChildren(...(map.traces ?? []).map((trace) => { const option = element('option', trace.title); option.value = trace.id; return option; }));
+    if ([...traceSelect.options].some((option) => option.value === selectedTrace)) traceSelect.value = selectedTrace;
+    document.getElementById('project').textContent = map.project;
+    document.getElementById('title').textContent = map.title;
+    document.getElementById('summary').textContent = map.summary;
+    projectSwitch.hidden = !map.live?.projects?.length;
+    if (!projectSwitch.hidden) {
+      const choices = map.live.projects.map(({ title, href }) => {
+        const option = element('option', title);
+        option.value = href;
+        return option;
+      });
+      projectSwitch.replaceChildren(...choices);
+      projectSwitch.value = map.live.current;
+    }
+    document.getElementById('fit').hidden = !map.phases.length;
+    viewport.hidden = !map.phases.length;
+  }
+
+  projectSwitch.addEventListener('change', () => { location.assign(projectSwitch.value); });
+  traceSelect.addEventListener('change', () => { renderDetails(); draw(); });
+  document.getElementById('fit').addEventListener('click', () => fit(true));
+  document.getElementById('close').addEventListener('click', () => {
+    if (expandedNode()) selectStep();
+    else chooseDetail();
+  });
+  renderHeader();
+  renderGraph();
+  new ResizeObserver(() => {
+    const width = viewport.clientWidth;
+    const height = viewport.clientHeight;
+    const initial = !viewportSize.width;
+    const next = { x: camera.x + (width - viewportSize.width) / 2, y: camera.y + (height - viewportSize.height) / 2 };
+    Object.assign(viewportSize, { width, height });
+    const density = devicePixelRatio || 1;
+    canvas.width = Math.round(width * density);
+    canvas.height = Math.round(height * density);
+    highlightCanvas.width = Math.round(width * density);
+    highlightCanvas.height = Math.round(height * density);
+    if (initial) fit(false);
+    else updateCamera(next);
+    renderDetails();
+    focusProposal();
+  }).observe(viewport);
+
+  if (map.live) {
+    async function refresh() {
+      try {
+        if (drag) return;
+        const [nextMap, nextProposal] = await Promise.all([
+          fetch(map.live.map, { cache: 'no-store' }).then((response) => response.ok ? response.text() : undefined),
+          fetch(map.live.proposal, { cache: 'no-store' }).then((response) => response.ok ? response.text() : undefined),
+        ]);
+        const mapChanged = nextMap !== undefined && nextMap !== mapText;
+        const proposalChanged = nextProposal !== undefined && nextProposal !== proposalText;
+        if (!mapChanged && !proposalChanged) return;
+        if (mapChanged) {
+          tracePositions = undefined;
+          map = JSON.parse(nextMap);
+          mapText = nextMap;
+          renderHeader();
+        }
+        if (proposalChanged) {
+          state = JSON.parse(nextProposal);
+          proposalText = nextProposal;
+        }
+        renderGraph();
+        renderProposal();
+        focusProposal();
+      } catch {
+        // Keep the last valid graph while the local server is unavailable.
+      } finally {
+        setTimeout(refresh, 1000);
+      }
+    }
+    refresh();
+  }
+</script>
+</html>
